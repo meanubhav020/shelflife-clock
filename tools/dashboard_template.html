@@ -66,6 +66,15 @@
   .star { color: var(--hold); font-weight: 700; }
   .cl { font-size: 13px; color: var(--muted); margin-top: 2px; }
   .cl b { color: var(--diff); font-weight: 600; }
+  .live { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+  .live h2 { font-size: 15px; margin: 0 0 4px; }
+  .live-row { display: flex; gap: 8px; margin: 10px 0 6px; }
+  .live-row input { flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--text); padding: 8px 10px; border-radius: 8px; font: inherit; min-width: 0; }
+  .live-row button { border: 0; background: var(--accent); color: var(--bg); padding: 8px 18px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  .live-row button:disabled { opacity: .45; cursor: not-allowed; }
+  .live-item { border-top: 1px solid var(--line); padding: 10px 0 2px; margin-top: 10px; }
+  .live-item pre { white-space: pre-wrap; font: 13px/1.45 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; }
+  .live-err { color: var(--hold); }
   @media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } .agree .grid { grid-template-columns: 1fr; } .controls input { margin-left: 0; width: 100%; } }
 </style>
 </head>
@@ -74,6 +83,17 @@
   <h1>Shelf-Life Clock</h1>
   <p class="sub">Larkfield Distribution, expiry risk queue. Calculations as of 2026-09-21.</p>
   <div class="banner">Training prototype. All data and policy are made up. Read-only view of the Claude Code queue (action_queue.csv) beside the API run (action_queue_api.csv). Nothing here sends or approves anything.</div>
+
+  <div class="live" id="live" hidden>
+    <h2>Run the agent live</h2>
+    <p class="muted" id="live-note"></p>
+    <div class="live-row">
+      <input id="live-ids" placeholder="Batch IDs, e.g. LF-70006, LF-70003" autocomplete="off">
+      <button id="live-run">Run</button>
+    </div>
+    <div id="live-msg" class="reason"></div>
+    <div id="live-out"></div>
+  </div>
 
   <div class="cards" id="cards"></div>
   <div class="agree" id="agree"></div>
@@ -91,7 +111,8 @@
   </div>
 </div>
 <script>
-const DATA = __DATA__;
+const LIVE = __LIVE__;
+let DATA = __DATA__;
 let filter = "ALL";
 let onlyDiff = false;
 let query = "";
@@ -175,6 +196,61 @@ function renderRows() {
 }
 
 renderCards(); renderTop5(); renderControls(); renderRows();
+
+if (LIVE) {
+  const $ = id => document.getElementById(id);
+  const call = (path, body) => fetch(path, body === undefined ? {headers: {"X-Requested-With": "shelflife"}} : {
+    method: "POST", headers: {"Content-Type": "application/json", "X-Requested-With": "shelflife"}, body: JSON.stringify(body)
+  }).then(async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || r.statusText); return j; });
+  let shown = 0, timer = null;
+
+  async function refresh() {
+    DATA = await call("/data.json");
+    renderCards(); renderTop5(); renderRows();
+  }
+
+  function item(r) {
+    if (!r.ok) return `<div class="live-item"><strong>${esc(r.batch_id)}</strong> <span class="live-err">${esc(r.error)}</span></div>`;
+    const x = r.row, cc = (DATA.rows.find(d => d.batch_id === r.batch_id) || {}).cc;
+    const same = cc ? (cc.action === (x.action || "None") && cc.status === x.status) : null;
+    return `<div class="live-item"><strong>${esc(r.batch_id)}</strong> ${esc(x.action || "None")} <span class="pill ${x.status}">${x.status}</span>
+      ${same === null ? "" : `<span class="pill ${same ? "same" : "diff"}">${same ? "matches Claude Code run" : "differs from Claude Code run"}</span>`}
+      <div class="cl">${esc(x.clause_ids.split(";").join(", "))}${x.approver ? " | approver: " + esc(x.approver) : " | no approver"}</div>
+      ${x.hold_reason ? `<div class="reason">${esc(x.hold_reason)}</div>` : ""}
+      ${r.reason ? `<div class="reason">Model reason: ${esc(r.reason)}</div>` : ""}
+      ${r.ruled_out ? `<div class="reason">Ruled out: ${esc(r.ruled_out.split(";").join(", "))}</div>` : ""}
+      ${r.notes ? `<div class="reason live-err">Flags: ${esc(r.notes)}</div>` : ""}
+      ${r.request ? `<pre>${esc(r.request)}</pre>` : ""}</div>`;
+  }
+
+  async function poll() {
+    try {
+      const s = await call("/status");
+      const out = $("live-out");
+      s.results.slice(shown).forEach(r => { out.insertAdjacentHTML("afterbegin", item(r)); });
+      shown = s.results.length;
+      $("live-msg").textContent = s.running ? `Running: ${s.results.length} of ${s.total} done...` : (s.total ? `Finished ${s.results.length} of ${s.total}.` : "");
+      if (!s.running) { clearInterval(timer); timer = null; $("live-run").disabled = !s.key_set; await refresh(); }
+    } catch (e) { $("live-msg").textContent = e.message; clearInterval(timer); timer = null; $("live-run").disabled = false; }
+  }
+
+  async function init() {
+    $("live").hidden = false;
+    const s = await call("/status");
+    $("live-note").textContent = `Runs tools/run_agent.py on this computer. Each batch is up to two paid API calls. Up to ${s.max_batches} batches per run. Results are saved to action_queue_api.csv and the table below updates when the run ends.`;
+    if (!s.key_set) { $("live-run").disabled = true; $("live-msg").textContent = "ANTHROPIC_API_KEY is not set in the environment of the server. Stop it, set the key, and start it again."; }
+    $("live-run").onclick = async () => {
+      const ids = $("live-ids").value.split(/[\s,;]+/).filter(Boolean);
+      if (!ids.length) { $("live-msg").textContent = "Enter at least one batch ID."; return; }
+      $("live-run").disabled = true; $("live-out").innerHTML = ""; shown = 0;
+      try { await call("/run", {batches: ids}); $("live-msg").textContent = "Started..."; timer = setInterval(poll, 1500); poll(); }
+      catch (e) { $("live-msg").textContent = e.message; $("live-run").disabled = false; }
+    };
+    $("live-ids").onkeydown = e => { e.stopPropagation(); if (e.key === "Enter") $("live-run").click(); };
+    if (s.running) { $("live-run").disabled = true; timer = setInterval(poll, 1500); poll(); }
+  }
+  init();
+}
 </script>
 </body>
 </html>
