@@ -10,6 +10,7 @@
     --ready: #1f7a4d; --ready-bg: #e3f3ea;
     --hold: #b4471a; --hold-bg: #fbe9df;
     --monitor: #4a5a78; --monitor-bg: #e6ebf3;
+    --diff: #8a5a00; --diff-bg: #fbf0d5;
     --accent: #1d1d1b;
   }
   @media (prefers-color-scheme: dark) {
@@ -18,57 +19,73 @@
       --ready: #6fd0a0; --ready-bg: #1b3a2b;
       --hold: #f0996b; --hold-bg: #3e2418;
       --monitor: #9db2d6; --monitor-bg: #232c3d;
+      --diff: #e6b94d; --diff-bg: #3a2f12;
       --accent: #ecebe4;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .sub { color: var(--muted); margin: 0 0 20px; }
   .banner { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 12px; color: var(--muted); font-size: 13px; margin-bottom: 20px; }
-  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .card .n { font-size: 30px; font-weight: 650; }
+  .card .n { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; }
   .card .l { color: var(--muted); font-size: 13px; }
+  .agree { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+  .agree h2, .top5 h2 { font-size: 15px; margin: 0 0 8px; }
+  .agree .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .agree .n { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .agree .l { color: var(--muted); font-size: 13px; }
+  .agree p { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
   .top5 { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
-  .top5 h2 { font-size: 15px; margin: 0 0 8px; }
   .top5 ol { margin: 0; padding-left: 20px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
   .controls button { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit; }
   .controls button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .controls .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
   .controls input { margin-left: auto; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 6px 10px; border-radius: 8px; font: inherit; min-width: 200px; }
   .tablewrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 980px; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: var(--panel); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; background: var(--panel); }
+  th.grp { text-align: center; border-bottom: 1px solid var(--line); }
   tr:last-child td { border-bottom: 0; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.side { width: 27%; }
+  td.side + td.side { border-left: 1px solid var(--line); }
   .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
   .pill.READY { color: var(--ready); background: var(--ready-bg); }
   .pill.HOLD { color: var(--hold); background: var(--hold-bg); }
   .pill.MONITOR { color: var(--monitor); background: var(--monitor-bg); }
+  .pill.diff { color: var(--diff); background: var(--diff-bg); }
+  .pill.same { color: var(--ready); background: var(--ready-bg); }
   .muted { color: var(--muted); }
   .reason { font-size: 13px; color: var(--muted); margin-top: 3px; }
   .star { color: var(--hold); font-weight: 700; }
-  @media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } .controls input { margin-left: 0; width: 100%; } }
+  .cl { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .cl b { color: var(--diff); font-weight: 600; }
+  @media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } .agree .grid { grid-template-columns: 1fr; } .controls input { margin-left: 0; width: 100%; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Shelf-Life Clock</h1>
   <p class="sub">Larkfield Distribution, expiry risk queue. Calculations as of 2026-09-21.</p>
-  <div class="banner">Training prototype. All data and policy are made up. Read-only view of action_queue.csv, nothing here sends or approves anything.</div>
+  <div class="banner">Training prototype. All data and policy are made up. Read-only view of the Claude Code queue (action_queue.csv) beside the API run (action_queue_api.csv). Nothing here sends or approves anything.</div>
 
   <div class="cards" id="cards"></div>
+  <div class="agree" id="agree"></div>
   <div class="top5"><h2>Top five batches by score</h2><ol id="top5"></ol></div>
 
   <div class="controls" id="controls"></div>
   <div class="tablewrap">
     <table>
-      <thead><tr>
-        <th>Batch</th><th>Item</th><th>Days left</th><th>Value</th><th>Score</th><th>Action</th><th>Status</th><th>Approver</th>
-      </tr></thead>
+      <thead>
+        <tr><th colspan="4"></th><th class="grp" colspan="2">Claude Code run</th><th class="grp">API run</th><th></th></tr>
+        <tr><th>Batch</th><th>Item</th><th>Days left</th><th>Score</th><th>Action, clauses, approver</th><th>Status</th><th>Action, clauses, approver</th><th>Agreement</th></tr>
+      </thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -76,22 +93,30 @@
 <script>
 const DATA = __DATA__;
 let filter = "ALL";
+let onlyDiff = false;
 let query = "";
-const money = v => v == null ? "n/a" : "$" + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = v => v == null ? "n/a" : v.toLocaleString(undefined, {maximumFractionDigits: 2});
+const money = v => v == null ? "n/a" : "$" + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
 function renderCards() {
   const s = DATA.summary;
-  const items = [["In scope", s.in_scope], ["Ready", s.READY], ["Hold", s.HOLD], ["Monitor", s.MONITOR]];
-  document.getElementById("cards").innerHTML = items.map(([l, n]) =>
-    `<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  document.getElementById("cards").innerHTML = [["In scope", s.in_scope], ["Ready", s.READY], ["Hold", s.HOLD], ["Monitor", s.MONITOR]]
+    .map(([l, n]) => `<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  document.getElementById("agree").innerHTML = `<h2>Claude Code run vs API run</h2>
+    <div class="grid">
+      <div><div class="n">${s.action_status_match} of ${s.compared}</div><div class="l">same action and status</div></div>
+      <div><div class="n">${s.approver_match} of ${s.compared}</div><div class="l">same approvers</div></div>
+      <div><div class="n">${s.identical} of ${s.compared}</div><div class="l">identical on action, status, approvers and clauses</div></div>
+    </div>
+    <p>Approvers are applied by code in the API run, so that match checks the rule code, not the model. Clause differences are mostly extra context clauses cited by the API run.</p>`;
 }
 
 function renderTop5() {
   const byId = Object.fromEntries(DATA.rows.map(r => [r.batch_id, r]));
   document.getElementById("top5").innerHTML = DATA.top_five.map(id => {
     const r = byId[id];
-    return `<li><strong>${esc(id)}</strong> ${esc(r.description)}, score ${r.score.toLocaleString(undefined,{maximumFractionDigits:2})}, ${esc(r.action)} <span class="pill ${r.status}">${r.status}</span></li>`;
+    return `<li><strong>${esc(id)}</strong> ${esc(r.description)}, score ${fmt(r.score)}, ${esc(r.cc.action)} <span class="pill ${r.cc.status}">${r.cc.status}</span></li>`;
   }).join("");
 }
 
@@ -99,28 +124,53 @@ function renderControls() {
   const opts = ["ALL", "READY", "HOLD", "MONITOR"];
   document.getElementById("controls").innerHTML =
     opts.map(o => `<button data-f="${o}" class="${o === filter ? "on" : ""}">${o === "ALL" ? "All" : o[0] + o.slice(1).toLowerCase()}</button>`).join("") +
+    `<span class="sep"></span><button id="diffbtn" class="${onlyDiff ? "on" : ""}">Differences only</button>` +
     `<input id="q" placeholder="Search batch, item, action" value="${esc(query)}">`;
-  document.querySelectorAll("#controls button").forEach(b => b.onclick = () => { filter = b.dataset.f; renderControls(); renderRows(); });
+  document.querySelectorAll("#controls button[data-f]").forEach(b => b.onclick = () => { filter = b.dataset.f; renderControls(); renderRows(); });
+  document.getElementById("diffbtn").onclick = () => { onlyDiff = !onlyDiff; renderControls(); renderRows(); };
   const q = document.getElementById("q");
   q.oninput = () => { query = q.value; renderRows(); };
   q.onkeydown = e => e.stopPropagation();
 }
 
+function side(x, other, oppKey) {
+  if (!x) return '<span class="muted">not run</span>';
+  const clauses = x.clauses.map(c => (other && !other.clauses.includes(c)) ? `<b>${esc(c)}</b>` : esc(c)).join(", ");
+  return `${esc(x.action)}<div class="cl">${clauses}</div><div class="cl">${x.approvers.length ? esc(x.approvers.join("; ")) : "no approver"}</div>`;
+}
+
+function agreement(r) {
+  if (!r.api) return '<span class="muted">n/a</span>';
+  if (r.identical) return '<span class="pill same">Identical</span>';
+  const bits = [];
+  if (!r.action_status_match) bits.push("action or status");
+  if (!r.approver_match) bits.push("approver");
+  if (r.only_cc.length || r.only_api.length) {
+    const t = [];
+    if (r.only_api.length) t.push("API adds " + r.only_api.join(", "));
+    if (r.only_cc.length) t.push("Claude Code adds " + r.only_cc.join(", "));
+    bits.push(t.join("; "));
+  }
+  const head = (r.action_status_match && r.approver_match) ? "Clauses differ" : "Differs";
+  return `<span class="pill diff">${head}</span><div class="reason">${esc(bits.join(" / "))}</div>`;
+}
+
 function renderRows() {
   const needle = query.trim().toLowerCase();
   const rows = DATA.rows.filter(r =>
-    (filter === "ALL" || r.status === filter) &&
-    (!needle || [r.batch_id, r.description, r.action, r.approver].join(" ").toLowerCase().includes(needle)));
+    (filter === "ALL" || r.cc.status === filter) &&
+    (!onlyDiff || (r.api && !r.identical)) &&
+    (!needle || [r.batch_id, r.description, r.cc.action, r.cc.approvers.join(" ")].join(" ").toLowerCase().includes(needle)));
   document.getElementById("rows").innerHTML = rows.map(r => `
     <tr>
       <td><strong>${esc(r.batch_id)}</strong><div class="muted">${esc(r.location_id)}</div></td>
-      <td>${esc(r.description)}<div class="muted">${esc(r.product_class)}${r.trust_flag !== "OK" ? ` <span class="star">${esc(r.trust_flag)}</span>` : ""}</div></td>
+      <td>${esc(r.description)}<div class="muted">${esc(r.product_class)}${r.trust_flag !== "OK" ? ` <span class="star">${esc(r.trust_flag)}</span>` : ""}</div><div class="muted">${money(r.batch_value)}</div></td>
       <td class="num">${r.days_to_expiry == null ? "n/a" : r.days_to_expiry}</td>
-      <td class="num">${money(r.batch_value)}</td>
-      <td class="num">${r.score == null ? "n/a" : r.score.toLocaleString(undefined,{maximumFractionDigits:2})}${r.band ? `<div class="muted">${esc(r.band)}</div>` : ""}</td>
-      <td>${esc(r.action)}<div class="muted">${esc(r.clause_ids)}</div></td>
-      <td><span class="pill ${r.status}">${r.status}</span>${r.reason ? `<div class="reason">${esc(r.reason)}</div>` : ""}</td>
-      <td>${r.approver ? esc(r.approver) : '<span class="muted">none</span>'}</td>
+      <td class="num">${r.score == null ? "n/a" : fmt(r.score)}${r.band ? `<div class="muted">${esc(r.band)}</div>` : ""}</td>
+      <td class="side">${side(r.cc, r.api)}${r.cc.reason ? `<div class="reason">${esc(r.cc.reason)}</div>` : ""}</td>
+      <td><span class="pill ${r.cc.status}">${r.cc.status}</span>${r.api && r.api.status !== r.cc.status ? `<div class="reason">API: ${esc(r.api.status)}</div>` : ""}</td>
+      <td class="side">${side(r.api, r.cc)}${r.api && r.api.reason ? `<div class="reason">${esc(r.api.reason)}</div>` : ""}</td>
+      <td>${agreement(r)}</td>
     </tr>`).join("") || `<tr><td colspan="8" class="muted">No batches match.</td></tr>`;
 }
 
