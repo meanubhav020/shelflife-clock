@@ -36,7 +36,7 @@ def shape(q):
     }
 
 
-def main():
+def build_data():
     scored = load("scored.csv", "batch_id")
     inventory = load("inventory_clean.csv", "batch_id")
     skus = load("sku_master.csv", "sku")
@@ -92,12 +92,19 @@ def main():
     scored_rows = [r for r in rows if r["score"] is not None]
     top_five = [r["batch_id"] for r in sorted(scored_rows, key=lambda r: r["score"], reverse=True)[:5]]
 
-    data = json.dumps({"rows": rows, "summary": summary, "top_five": top_five})
-    data = data.replace("</", "<\\/")
+    return {"rows": rows, "summary": summary, "top_five": top_five}
 
+
+def render_page(data, live=False):
+    blob = json.dumps(data).replace("</", "<\\/")
     template = (ROOT / "tools" / "dashboard_template.html").read_text(encoding="utf-8")
-    (ROOT / "dashboard.html").write_text(template.replace("__DATA__", data), encoding="utf-8")
-    print(f"Wrote dashboard.html: {summary}")
+    return template.replace("__LIVE__", "true" if live else "false").replace("__DATA__", blob)
+
+
+def main():
+    data = build_data()
+    (ROOT / "dashboard.html").write_text(render_page(data), encoding="utf-8")
+    print(f"Wrote dashboard.html: {data['summary']}")
 
 
 if __name__ == "__main__":
