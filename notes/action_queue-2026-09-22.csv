@@ -1,0 +1,9 @@
+batch_id,action,clause_ids,status,hold_reason,approver
+LF-70001,MARKDOWN,REF-ACT-03;REF-APR-02,HOLD,"Batch value $12000 is above $2,000",Finance Director
+LF-70002,MARKDOWN,REF-ACT-03;REF-APR-05,READY,,
+LF-70004,,REF-APR-04,HOLD,"data check flag not OK (MISSING_EXPIRY)",Inventory Control
+LF-70006,TRANSFER,REF-ACT-02;REF-CC-01;REF-APR-05,READY,,
+LF-70010,,REF-APR-04,HOLD,"data check flag not OK (STALE_COUNT)",Inventory Control
+LF-70003,,REF-HC-04;REF-APR-01,HOLD,"HEALTHCARE (sku_master.csv, row label says FOOD) with 12 days remaining, cannot transfer (fewer than 21 days) or return (supplier_accepts_returns is N); escalated, no disposition proposed",QA Lead
+LF-70005,MARKDOWN,REF-ACT-03;REF-APR-05,READY,,
+LF-70009,DISPOSE,REF-ACT-05;REF-APR-01;REF-APR-02;REF-APR-03,HOLD,"HEALTHCARE, expired (3 days past expiry), batch value $2400 (above $2,000)","QA Lead; Regional Manager; Finance"
