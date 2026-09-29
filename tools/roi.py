@@ -3,6 +3,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Case 06 / notes/roi.md.
+BASELINE = 185000
+
 # [REF-FIN-02] Planning recovery rates, as a share of batch value.
 RECOVERY_RATES = {
     "TRANSFER": 0.90,
@@ -22,32 +25,18 @@ def recovery_rate(action, product_class):
     return rate
 
 
-def main():
-    with open(ROOT / "notes" / "sample.txt") as f:
-        sample = [line.strip() for line in f if line.strip()]
-
-    with open(ROOT / "action_queue.csv", newline="") as f:
-        queue = {r["batch_id"]: r for r in csv.DictReader(f)}
-
-    with open(ROOT / "scored.csv", newline="") as f:
-        scored = {r["batch_id"]: r for r in csv.DictReader(f)}
-
-    with open(ROOT / "inventory_clean.csv", newline="") as f:
-        inventory = {r["batch_id"]: r for r in csv.DictReader(f)}
-
-    with open(ROOT / "sku_master.csv", newline="") as f:
-        sku_master = {r["sku"]: r for r in csv.DictReader(f)}
-
+def compute_roi(batch_ids, queue, scored, inventory, sku_master):
+    """R = total value recovered / total value at risk, over the given batches.
+    value at risk = batch value x unsold share. A bad trust flag recovers nothing."""
     total_recovered = 0.0
     total_at_risk = 0.0
     rows = []
 
-    for batch_id in sample:
+    for batch_id in batch_ids:
         q = queue.get(batch_id)
         s = scored.get(batch_id)
         inv = inventory.get(batch_id)
         if q is None or s is None or inv is None:
-            print(f"WARNING: {batch_id} missing from one of the inputs, skipping.")
             continue
 
         trust_flag = inv["trust_flag"]
@@ -80,6 +69,30 @@ def main():
         })
 
     r = total_recovered / total_at_risk if total_at_risk else 0.0
+    return {"rows": rows, "total_at_risk": total_at_risk, "total_recovered": total_recovered, "r": r}
+
+
+def main():
+    with open(ROOT / "notes" / "sample.txt") as f:
+        sample = [line.strip() for line in f if line.strip()]
+
+    with open(ROOT / "action_queue.csv", newline="") as f:
+        queue = {r["batch_id"]: r for r in csv.DictReader(f)}
+
+    with open(ROOT / "scored.csv", newline="") as f:
+        scored = {r["batch_id"]: r for r in csv.DictReader(f)}
+
+    with open(ROOT / "inventory_clean.csv", newline="") as f:
+        inventory = {r["batch_id"]: r for r in csv.DictReader(f)}
+
+    with open(ROOT / "sku_master.csv", newline="") as f:
+        sku_master = {r["sku"]: r for r in csv.DictReader(f)}
+
+    result = compute_roi(sample, queue, scored, inventory, sku_master)
+    rows, total_at_risk, total_recovered, r = (
+        result["rows"], result["total_at_risk"], result["total_recovered"], result["r"])
+    if len(rows) < len(sample):
+        print(f"WARNING: {len(sample) - len(rows)} batch(es) missing from one of the inputs, skipped.")
 
     print(f"Batches: {len(rows)}")
     print(f"Total value at risk: ${total_at_risk:,.2f}")

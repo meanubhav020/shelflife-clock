@@ -1,11 +1,19 @@
 import csv
 import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from roi import BASELINE, compute_roi  # noqa: E402
+
 QUEUE_FILE = "action_queue_api.csv"
+# The ten designed test batches are built to be tricky (Lab 6); they bias an ROI
+# estimate, so the panel excludes them the same way the original random sample did.
+DESIGNED_TEST_BATCHES = {f"LF-{i}" for i in range(70001, 70011)}
+ACTING_RATES = [("cautious", 0.40), ("typical", 0.60), ("optimistic", 0.80)]
 
 
 def load(name, key):
@@ -67,7 +75,20 @@ def build_data():
     scored_rows = [r for r in rows if r["score"] is not None]
     top_five = [r["batch_id"] for r in sorted(scored_rows, key=lambda r: r["score"], reverse=True)[:5]]
 
-    return {"rows": rows, "summary": summary, "top_five": top_five, "source": QUEUE_FILE}
+    roi_batch_ids = [b for b in queue if b not in DESIGNED_TEST_BATCHES and scored.get(b, {}).get("in_scope") == "Y"]
+    roi_result = compute_roi(roi_batch_ids, queue, scored, inventory, skus)
+    r = roi_result["r"]
+    roi = {
+        "batches": len(roi_result["rows"]),
+        "excluded_test_batches": len(DESIGNED_TEST_BATCHES & set(queue)),
+        "total_at_risk": roi_result["total_at_risk"],
+        "total_recovered": roi_result["total_recovered"],
+        "r": r,
+        "baseline": BASELINE,
+        "acting_rates": [{"label": label, "e": e, "yearly_saving": BASELINE * r * e} for label, e in ACTING_RATES],
+    }
+
+    return {"rows": rows, "summary": summary, "top_five": top_five, "source": QUEUE_FILE, "roi": roi}
 
 
 def render_page(data, live=False):
