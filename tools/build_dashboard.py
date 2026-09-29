@@ -40,12 +40,16 @@ def build_data():
     inventory = load("inventory_clean.csv", "batch_id")
     skus = load("sku_master.csv", "sku")
     queue = load(QUEUE_FILE, "batch_id")
+    locations = load("locations.csv", "location_id")
 
     rows = []
     for b, q in queue.items():
         s = scored.get(b, {})
         inv = inventory.get(b, {})
         sku = skus.get(inv.get("sku", ""), {})
+        batch_value = num(s.get("batch_value"))
+        unsold_share = num(s.get("unsold_share"))
+        value_at_risk = batch_value * unsold_share if batch_value is not None and unsold_share is not None else None
         rows.append({
             "batch_id": b,
             "description": sku.get("description", ""),
@@ -53,7 +57,8 @@ def build_data():
             "location_id": inv.get("location_id", ""),
             "trust_flag": inv.get("trust_flag", ""),
             "days_to_expiry": num(s.get("days_to_expiry")),
-            "batch_value": num(s.get("batch_value")),
+            "batch_value": batch_value,
+            "value_at_risk": value_at_risk,
             "score": num(s.get("score")),
             "band": s.get("band", ""),
             "action": q["action"] or "None",
@@ -88,7 +93,27 @@ def build_data():
         "acting_rates": [{"label": label, "e": e, "yearly_saving": BASELINE * r * e} for label, e in ACTING_RATES],
     }
 
-    return {"rows": rows, "summary": summary, "top_five": top_five, "source": QUEUE_FILE, "roi": roi}
+    by_location = {}
+    for r in rows:
+        loc_id = r["location_id"]
+        agg = by_location.setdefault(loc_id, {
+            "location_id": loc_id,
+            "name": locations.get(loc_id, {}).get("name", loc_id or "(unknown)"),
+            "region": locations.get(loc_id, {}).get("region", ""),
+            "type": locations.get(loc_id, {}).get("type", ""),
+            "cold_chain": locations.get(loc_id, {}).get("cold_chain", ""),
+            "healthcare_licensed": locations.get(loc_id, {}).get("healthcare_licensed", ""),
+            "batches": 0, "total_value": 0.0, "total_at_risk": 0.0,
+            "READY": 0, "HOLD": 0, "MONITOR": 0,
+        })
+        agg["batches"] += 1
+        agg["total_value"] += r["batch_value"] or 0.0
+        agg["total_at_risk"] += r["value_at_risk"] or 0.0
+        agg[r["status"]] = agg.get(r["status"], 0) + 1
+    locations_out = sorted(by_location.values(), key=lambda a: a["total_at_risk"], reverse=True)
+
+    return {"rows": rows, "summary": summary, "top_five": top_five, "source": QUEUE_FILE, "roi": roi,
+            "locations": locations_out}
 
 
 def render_page(data, live=False):
