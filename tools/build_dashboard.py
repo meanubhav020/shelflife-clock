@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from roi import BASELINE, compute_roi  # noqa: E402
 
 QUEUE_FILE = "action_queue_api.csv"
+APPROVALS_FILE = "approvals.csv"
+APPROVALS_COLUMNS = ["batch_id", "role", "name", "timestamp", "note"]
 # The ten designed test batches are built to be tricky (Lab 6); they bias an ROI
 # estimate, so the panel excludes them the same way the original random sample did.
 DESIGNED_TEST_BATCHES = {f"LF-{i}" for i in range(70001, 70011)}
@@ -22,6 +24,14 @@ def load(name, key):
         return {}
     with open(path, newline="", encoding="utf-8") as f:
         return {r[key]: r for r in csv.DictReader(f)}
+
+
+def load_rows(name):
+    path = ROOT / name
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
 
 
 def num(value):
@@ -42,6 +52,10 @@ def build_data():
     queue = load(QUEUE_FILE, "batch_id")
     locations = load("locations.csv", "location_id")
 
+    approvals_by_batch = {}
+    for a in load_rows(APPROVALS_FILE):
+        approvals_by_batch.setdefault(a["batch_id"], []).append(a)
+
     rows = []
     for b, q in queue.items():
         s = scored.get(b, {})
@@ -50,6 +64,19 @@ def build_data():
         batch_value = num(s.get("batch_value"))
         unsold_share = num(s.get("unsold_share"))
         value_at_risk = batch_value * unsold_share if batch_value is not None and unsold_share is not None else None
+        approvers = parts(q["approver"])
+        action = q["action"] or "None"
+        status = q["status"]
+        # A batch is approvable here only when there is an actual action waiting on a
+        # named approver. A bad-data-flag hold (REF-APR-04) or a no-disposition
+        # healthcare escalation (REF-HC-04) has no action to sign off on; those need a
+        # person to fix the data or make the call, not a signature in this dashboard.
+        approvable = status == "HOLD" and action != "None" and bool(approvers)
+        batch_approvals = sorted(
+            [x for x in approvals_by_batch.get(b, []) if x["role"] in approvers],
+            key=lambda x: x["timestamp"])
+        approved_roles = sorted({x["role"] for x in batch_approvals})
+        fully_approved = approvable and set(approvers) <= set(approved_roles)
         rows.append({
             "batch_id": b,
             "description": sku.get("description", ""),
@@ -61,11 +88,16 @@ def build_data():
             "value_at_risk": value_at_risk,
             "score": num(s.get("score")),
             "band": s.get("band", ""),
-            "action": q["action"] or "None",
+            "action": action,
             "clauses": parts(q["clause_ids"]),
-            "status": q["status"],
+            "status": status,
             "reason": q["hold_reason"],
-            "approvers": parts(q["approver"]),
+            "approvers": approvers,
+            "approvable": approvable,
+            "approvals": [{"role": x["role"], "name": x["name"], "timestamp": x["timestamp"],
+                           "note": x.get("note", "")} for x in batch_approvals],
+            "approved_roles": approved_roles,
+            "fully_approved": fully_approved,
         })
 
     counts = Counter(r["status"] for r in rows)
@@ -76,6 +108,8 @@ def build_data():
         "MONITOR": counts.get("MONITOR", 0),
     }
     summary["adds_up"] = summary["in_scope"] == summary["READY"] + summary["HOLD"] + summary["MONITOR"]
+    summary["approvable_holds"] = sum(1 for r in rows if r["approvable"])
+    summary["fully_approved_holds"] = sum(1 for r in rows if r["fully_approved"])
 
     scored_rows = [r for r in rows if r["score"] is not None]
     top_five = [r["batch_id"] for r in sorted(scored_rows, key=lambda r: r["score"], reverse=True)[:5]]

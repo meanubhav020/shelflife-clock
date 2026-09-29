@@ -84,6 +84,17 @@
   .live-item { border-top: 1px solid var(--line); padding: 10px 0 2px; margin-top: 10px; }
   .live-item pre { white-space: pre-wrap; font: 13px/1.45 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; }
   .live-err { color: var(--hold); }
+  .approvals { margin-top: 6px; }
+  .chip { display: inline-block; padding: 1px 8px; margin: 2px 4px 0 0; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--line); }
+  .chip.need { color: var(--muted); background: transparent; }
+  .chip.got { color: var(--ready); background: var(--ready-bg); border-color: transparent; }
+  .approved-note { font-size: 12px; color: var(--ready); margin-top: 4px; }
+  .approve-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+  .approve-form select, .approve-form input { border: 1px solid var(--line); background: var(--bg); color: var(--text); padding: 4px 6px; border-radius: 6px; font: inherit; font-size: 12px; }
+  .approve-form input { width: 120px; }
+  .approve-form button { border: 0; background: var(--accent); color: var(--bg); padding: 4px 10px; border-radius: 6px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .approve-form button:disabled { opacity: .45; cursor: not-allowed; }
+  .ap-msg { font-size: 12px; color: var(--hold); }
   @media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } .controls input { margin-left: 0; width: 100%; } }
 </style>
 </head>
@@ -91,7 +102,7 @@
 <div class="wrap">
   <h1>Shelf-Life Clock</h1>
   <p class="sub">Larkfield Distribution, expiry risk queue. Calculations as of 2026-09-21.</p>
-  <div class="banner">Training prototype. All data and policy are made up. Read-only view of the API run (action_queue_api.csv). Nothing here sends or approves anything.</div>
+  <div class="banner">Training prototype. All data and policy are made up. Read-only view of the API run (action_queue_api.csv). Nothing here sends anything. Recording an approval below is a typed name, not a verified signature: it is an audit note appended to approvals.csv, and it never changes a batch's status or unlocks a send.</div>
 
   <div class="live" id="live" hidden>
     <h2>Run the agent live</h2>
@@ -129,6 +140,9 @@ let query = "";
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmt = v => v == null ? "n/a" : v.toLocaleString(undefined, {maximumFractionDigits: 2});
 const money = v => v == null ? "n/a" : "$" + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const call = (path, body) => fetch(path, body === undefined ? {headers: {"X-Requested-With": "shelflife"}} : {
+  method: "POST", headers: {"Content-Type": "application/json", "X-Requested-With": "shelflife"}, body: JSON.stringify(body)
+}).then(async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || r.statusText); return j; });
 
 const COLUMNS = [
   {key: "batch_id", label: "Batch", type: "string"},
@@ -265,6 +279,28 @@ function renderLocationRows() {
   });
 }
 
+function approvalBlock(r) {
+  if (!r.approvable) return "";
+  const chips = r.approvers.map(role => {
+    const got = r.approved_roles.includes(role);
+    const who = got ? (r.approvals.filter(a => a.role === role).pop() || {}).name : null;
+    return `<span class="chip ${got ? "got" : "need"}" title="${who ? "Approved by " + esc(who) : "Needs sign-off"}">${esc(role)}${got ? " ✓" : ""}</span>`;
+  }).join("");
+  let extra = "";
+  if (r.fully_approved) {
+    extra = `<div class="approved-note">Fully approved. Recording this does not send anything: the outbox safety check still decides what can actually go out.</div>`;
+  } else if (LIVE) {
+    const missing = r.approvers.filter(x => !r.approved_roles.includes(x));
+    extra = `<div class="approve-form" data-batch="${esc(r.batch_id)}">
+      <select class="ap-role">${missing.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("")}</select>
+      <input class="ap-name" placeholder="Your name" maxlength="80">
+      <button class="ap-btn">Record approval</button>
+      <span class="ap-msg"></span>
+    </div>`;
+  }
+  return `<div class="approvals">${chips}${extra}</div>`;
+}
+
 function renderRows() {
   const needle = query.trim().toLowerCase();
   let rows = DATA.rows.filter(r =>
@@ -279,18 +315,31 @@ function renderRows() {
       <td class="num">${money(r.batch_value)}</td>
       <td class="num">${r.score == null ? "n/a" : fmt(r.score)}${r.band ? `<div class="muted">${esc(r.band)}</div>` : ""}</td>
       <td>${esc(r.action)}<div class="cl">${esc(r.clauses.join(", "))}</div></td>
-      <td><span class="pill ${r.status}">${r.status}</span>${r.reason ? `<div class="reason">${esc(r.reason)}</div>` : ""}</td>
+      <td><span class="pill ${r.status}">${r.status}</span>${r.reason ? `<div class="reason">${esc(r.reason)}</div>` : ""}${approvalBlock(r)}</td>
       <td>${r.approvers.length ? esc(r.approvers.join("; ")) : '<span class="muted">none</span>'}</td>
     </tr>`).join("") || `<tr><td colspan="8" class="muted">No batches match.</td></tr>`;
+  if (LIVE) {
+    document.querySelectorAll(".approve-form .ap-btn").forEach(btn => btn.onclick = async () => {
+      const form = btn.closest(".approve-form");
+      const batch_id = form.dataset.batch;
+      const role = form.querySelector(".ap-role").value;
+      const name = form.querySelector(".ap-name").value.trim();
+      const msg = form.querySelector(".ap-msg");
+      if (!name) { msg.textContent = "Enter a name first."; return; }
+      btn.disabled = true; msg.textContent = "";
+      try {
+        await call("/approve", {batch_id, role, name});
+        DATA = await call("/data.json");
+        renderCards(); renderRoi(); renderLocations(); renderTop5(); renderRows();
+      } catch (e) { msg.textContent = e.message; btn.disabled = false; }
+    });
+  }
 }
 
 renderCards(); renderRoi(); renderLocations(); renderTop5(); renderControls(); renderHead(); renderRows();
 
 if (LIVE) {
   const $ = id => document.getElementById(id);
-  const call = (path, body) => fetch(path, body === undefined ? {headers: {"X-Requested-With": "shelflife"}} : {
-    method: "POST", headers: {"Content-Type": "application/json", "X-Requested-With": "shelflife"}, body: JSON.stringify(body)
-  }).then(async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || r.statusText); return j; });
   let shown = 0, timer = null;
 
   async function refresh() {

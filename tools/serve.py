@@ -14,17 +14,19 @@ import re
 import subprocess
 import sys
 import threading
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-from build_dashboard import build_data, render_page  # noqa: E402
+from build_dashboard import APPROVALS_COLUMNS, APPROVALS_FILE, QUEUE_FILE, build_data, render_page  # noqa: E402
 from run_agent import DECISION_COLUMNS, QUEUE_COLUMNS  # noqa: E402
 
 MAX_BATCHES = 10
 BATCH_TIMEOUT_S = 300
 ID_RE = re.compile(r"^LF-\d{5}$")
+MAX_NAME_LEN = 80
 
 LOCK = threading.Lock()
 JOB = {"running": False, "total": 0, "results": []}
@@ -57,6 +59,16 @@ def upsert(path, columns, new_rows):
         w = csv.DictWriter(f, fieldnames=columns, restval="", extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
+
+
+def append_row(path, columns, row):
+    """Append-only: never rewrites or removes an earlier row, unlike upsert()."""
+    new_file = not path.exists()
+    with open(path, "a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=columns, restval="", extrasaction="ignore")
+        if new_file:
+            w.writeheader()
+        w.writerow(row)
 
 
 def run_one(batch_id):
@@ -146,16 +158,24 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.error(404, "not found")
 
+    def read_json_body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        return json.loads(self.rfile.read(length) or b"{}")
+
     def do_POST(self):
         if not self.guarded():
             return
-        if self.path != "/run":
-            return self.error(404, "not found")
+        if self.path == "/run":
+            return self.handle_run()
+        if self.path == "/approve":
+            return self.handle_approve()
+        return self.error(404, "not found")
+
+    def handle_run(self):
         if not os.environ.get("ANTHROPIC_API_KEY"):
             return self.error(400, "ANTHROPIC_API_KEY is not set for this server")
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-            ids = json.loads(self.rfile.read(length) or b"{}").get("batches", [])
+            ids = self.read_json_body().get("batches", [])
         except (ValueError, AttributeError):
             return self.error(400, "invalid request")
         ids = list(dict.fromkeys(str(i).strip().upper() for i in ids))
@@ -173,6 +193,42 @@ class Handler(BaseHTTPRequestHandler):
             JOB.update(running=True, total=len(ids), results=[])
         threading.Thread(target=worker, args=(ids,), daemon=True).start()
         self.reply(200, json.dumps({"started": ids}))
+
+    def handle_approve(self):
+        """Records who approved a HOLD batch's action. This is an audit note, not
+        authentication, and it never changes action_queue_api.csv or the real send
+        gate in hooks/pre_send_check.py — see the dashboard banner for why."""
+        try:
+            body = self.read_json_body()
+        except (ValueError, AttributeError):
+            return self.error(400, "invalid request")
+        batch_id = str(body.get("batch_id", "")).strip().upper()
+        role = str(body.get("role", "")).strip()
+        name = str(body.get("name", "")).strip()[:MAX_NAME_LEN]
+        note = str(body.get("note", "")).strip()[:300]
+        if not ID_RE.match(batch_id):
+            return self.error(400, "not a batch ID")
+        if not name:
+            return self.error(400, "name is required")
+
+        data = build_data()
+        row = next((r for r in data["rows"] if r["batch_id"] == batch_id), None)
+        if row is None:
+            return self.error(400, f"{batch_id} is not in {QUEUE_FILE}; run it first")
+        if not row["approvable"]:
+            reason = ("it is not on HOLD" if row["status"] != "HOLD" else
+                      "it has no action waiting on an approver (a data-check hold or an "
+                      "escalation with no disposition needs a person to fix the data or "
+                      "make the call, not a signature here)")
+            return self.error(400, f"{batch_id} cannot be approved here: {reason}")
+        if role not in row["approvers"]:
+            return self.error(400, f"role must be one of: {', '.join(row['approvers'])}")
+
+        append_row(ROOT / APPROVALS_FILE, APPROVALS_COLUMNS, {
+            "batch_id": batch_id, "role": role, "name": name,
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"), "note": note,
+        })
+        self.reply(200, json.dumps({"ok": True}))
 
 
 def main():
